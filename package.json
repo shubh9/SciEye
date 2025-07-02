@@ -11,7 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@mentra/sdk": "^2.0.3",
+    "@mentra/sdk": "^2.0.4",
     "express": "^4.21.2",
     "ws": "^8.18.1"
   },
