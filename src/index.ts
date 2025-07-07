@@ -25,6 +25,7 @@ const PORT = parseInt(process.env.PORT || '3000');
 class ExampleMentraOSApp extends AppServer {
   private photos: Map<string, StoredPhoto> = new Map(); // Store photos by userId
   private latestPhotoTimestamp: Map<string, number> = new Map(); // Track latest photo timestamp per user
+  private isStreamingPhotos: Map<string, boolean> = new Map(); // Track if we are streaming photos for a user
 
   constructor() {
     super({
@@ -129,18 +130,35 @@ class ExampleMentraOSApp extends AppServer {
    */
   protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
     this.logger.info(`Session started for user ${userId}`);
-
+    this.isStreamingPhotos.set(userId, false);
 
     session.events.onButtonPress(async (button) => {
       this.logger.info(`Button pressed: ${button.buttonId}, type: ${button.pressType}`);
 
-      const photoRequest = session.camera.requestPhoto();
-      photoRequest.catch((error) => this.logger.error(`Error taking photo: ${error}`));
-      photoRequest.then((photo) => {
-        this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
-        this.cachePhoto(photo, userId);
-      });
+      if (button.pressType === 'long') {
+        this.isStreamingPhotos.set(userId, !this.isStreamingPhotos.get(userId));
+        this.logger.info(`Streaming photos for user ${userId} is now ${this.isStreamingPhotos.get(userId)}`);
+        return;
+      } else {
+        const photoRequest = session.camera.requestPhoto();
+        photoRequest.catch((error) => this.logger.error(`Error taking photo: ${error}`));
+        photoRequest.then((photo) => {
+          this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
+          this.cachePhoto(photo, userId);
+        });
+      }
     });
+
+    setInterval(async () => {
+      if (this.isStreamingPhotos.get(userId)) {
+        try {
+          const photo = await session.camera.requestPhoto();
+          this.cachePhoto(photo, userId);
+        } catch (error) {
+          this.logger.error(`Error auto-taking photo: ${error}`);
+        }
+      }
+    }, 1000);
   }
 
   private async cachePhoto(photo: PhotoData, userId: string) {
