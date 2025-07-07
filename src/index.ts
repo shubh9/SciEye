@@ -1,6 +1,5 @@
-import { AppServer, AppSession, ViewType, AuthenticatedRequest } from '@mentra/sdk';
+import { AppServer, AppSession, ViewType, AuthenticatedRequest, PhotoData } from '@mentra/sdk';
 import { Request, Response } from 'express';
-import { PhotoData } from '../../AugmentOS/augmentos_cloud/packages/sdk/dist/types';
 
 /**
  * Interface representing a stored photo with metadata
@@ -34,12 +33,26 @@ class ExampleMentraOSApp extends AppServer {
       port: PORT,
     });
 
+    this.setupEJS();
     this.setupWebviewRoutes();
   }
 
-    /**
-   * Set up webview routes for photo display functionality
+  /**
+   * Configure EJS as the view engine for Express
    */
+  private setupEJS(): void {
+    const app = this.getExpressApp();
+
+    // Set EJS as the view engine
+    app.set('view engine', 'ejs');
+
+    // Set the views directory
+    app.set('views', './views');
+  }
+
+  /**
+ * Set up webview routes for photo display functionality
+ */
   private setupWebviewRoutes(): void {
     const app = this.getExpressApp();
 
@@ -59,8 +72,8 @@ class ExampleMentraOSApp extends AppServer {
         return;
       }
 
-      // Serve the photo viewer HTML interface
-      res.send(this.getPhotoViewerHTML());
+      // Render the photo viewer EJS template
+      res.render('photo-viewer');
     });
 
     // API endpoint to get the latest photo for the authenticated user
@@ -109,108 +122,7 @@ class ExampleMentraOSApp extends AppServer {
     });
   }
 
-    /**
-   * Generate HTML for the photo viewer interface with auto-refresh functionality
-   */
-  private getPhotoViewerHTML(): string {
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Photo Viewer</title>
-        <style>
-          body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            font-family: Arial, sans-serif;
-          }
 
-          .photo-container {
-            max-width: 100vw;
-            max-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-          }
-
-          .photo {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 8px;
-          }
-
-          .no-photo {
-            color: white;
-            text-align: center;
-            font-size: 18px;
-          }
-
-          .loading {
-            color: white;
-            text-align: center;
-            font-size: 16px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="photo-container">
-          <div id="content" class="loading">Loading latest photo...</div>
-        </div>
-
-        <script>
-          let currentRequestId = null;
-
-          /**
-           * Check for new photos and update display
-           */
-          async function checkForNewPhoto() {
-            try {
-              const response = await fetch('/api/latest-photo');
-
-              if (response.status === 404) {
-                // No photo available
-                document.getElementById('content').innerHTML =
-                  '<div class="no-photo">No photos taken yet. Take a photo using your MentraOS device!</div>';
-                return;
-              }
-
-              if (!response.ok) {
-                throw new Error('Failed to fetch photo info');
-              }
-
-              const photoInfo = await response.json();
-
-              // Check if this is a new photo
-              if (photoInfo.requestId !== currentRequestId) {
-                currentRequestId = photoInfo.requestId;
-
-                // Update the display with new photo
-                document.getElementById('content').innerHTML =
-                  '<img class="photo" src="/api/photo/' + photoInfo.requestId + '" alt="Latest Photo" />';
-              }
-            } catch (error) {
-              console.error('Error checking for new photo:', error);
-              document.getElementById('content').innerHTML =
-                '<div class="no-photo">Error loading photo. Please refresh the page.</div>';
-            }
-          }
-
-          // Check for new photos every 500ms (twice per second)
-          checkForNewPhoto(); // Initial check
-          setInterval(checkForNewPhoto, 500);
-        </script>
-      </body>
-      </html>
-    `;
-  }
 
   /**
    * Handle new session creation and button press events
@@ -218,45 +130,27 @@ class ExampleMentraOSApp extends AppServer {
   protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
     this.logger.info(`Session started for user ${userId}`);
 
-  // check if we have a camera
-  if (!session.capabilities?.hasCamera) {
-    this.logger.warn('Camera not available');
-    return;
-  }
+    // check if we have a camera
+    if (!session.capabilities?.hasCamera) {
+      this.logger.warn('Camera not available');
+      return;
+    }
 
 
     session.events.onButtonPress(async (button) => {
       this.logger.info(`Button pressed: ${button.buttonId}, type: ${button.pressType}`);
-     /* session.stopAudio();
 
-      try {
-        const playresult = session.playAudio({audioUrl: 'https://parrot-samples.s3.amazonaws.com/kettle/charles.wav', volume: 0.5});
-
-        playresult.then(()=>this.logger.info('Audio play finished'));
-        playresult.catch((error)=>this.logger.error(`Error playing audio: ${error}`));
-      } catch (error) {
-        this.logger.error(`Error playing audio: ${error}`);
-      }*/
-
-
-      this.takePhoto(session, userId);
-
-
+      const photoRequest = session.camera.requestPhoto();
+      photoRequest.catch((error) => this.logger.error(`Error taking photo: ${error}`));
+      photoRequest.then((photo) => {
+        this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
+        this.cachePhoto(photo, userId);
+      });
     });
   }
 
-  private async takePhoto(session: AppSession, userId: string) {
-
-    const photoRequest = session.camera.requestPhoto();
-    photoRequest.catch((error)=>this.logger.error(`Error taking photo: ${error}`));
-    photoRequest.then((photo) => {
-      this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
-      this.storePhoto(photo, userId);
-    });
-  }
-
-  private async storePhoto(photo: PhotoData, userId: string) {
-    const storedPhoto: StoredPhoto = {
+  private async cachePhoto(photo: PhotoData, userId: string) {
+    const cachedPhoto: StoredPhoto = {
       requestId: photo.requestId,
       buffer: photo.buffer,
       timestamp: photo.timestamp,
@@ -265,9 +159,9 @@ class ExampleMentraOSApp extends AppServer {
       filename: photo.filename,
       size: photo.size
     };
-    this.photos.set(userId, storedPhoto);
-    this.latestPhotoTimestamp.set(userId, storedPhoto.timestamp.getTime());
-    this.logger.info(`Photo stored for user ${userId}, timestamp: ${storedPhoto.timestamp}`);
+    this.photos.set(userId, cachedPhoto);
+    this.latestPhotoTimestamp.set(userId, cachedPhoto.timestamp.getTime());
+    this.logger.info(`Photo cached for user ${userId}, timestamp: ${cachedPhoto.timestamp}`);
   }
 }
 
