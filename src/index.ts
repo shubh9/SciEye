@@ -130,12 +130,6 @@ class ExampleMentraOSApp extends AppServer {
   protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
     this.logger.info(`Session started for user ${userId}`);
 
-    // check if we have a camera
-    if (!session.capabilities?.hasCamera) {
-      this.logger.warn('Camera not available');
-      return;
-    }
-
 
     session.events.onButtonPress(async (button) => {
       this.logger.info(`Button pressed: ${button.buttonId}, type: ${button.pressType}`);
