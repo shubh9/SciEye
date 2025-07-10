@@ -78,7 +78,7 @@ class ExampleMentraOSApp extends AppServer {
       }
     });
 
-    // every 2 seconds, check if we are in streaming mode and if we are ready to take another photo
+    // repeatedly check if we are in streaming mode and if we are ready to take another photo
     setInterval(async () => {
       if (this.isStreamingPhotos.get(userId) && Date.now() > (this.nextPhotoTime.get(userId) ?? 0)) {
         try {
@@ -97,7 +97,7 @@ class ExampleMentraOSApp extends AppServer {
           this.logger.error(`Error auto-taking photo: ${error}`);
         }
       }
-    }, 2000);
+    }, 1000);
   }
 
   protected async onStop(sessionId: string, userId: string, reason: string): Promise<void> {
@@ -121,6 +121,10 @@ class ExampleMentraOSApp extends AppServer {
       filename: photo.filename,
       size: photo.size
     };
+
+    // this example app simply stores the photo in memory for display in the webview, but you could also send the photo to an AI api,
+    // or store it in a database or cloud storage, send it to roboflow, or do other processing here
+
     // cache the photo for display
     this.photos.set(userId, cachedPhoto);
     // update the latest photo timestamp

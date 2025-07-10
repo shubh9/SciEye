@@ -2,6 +2,8 @@
 
 This is a simple example app which demonstrates how to use the MentraOS Camera API to take photos and display them in a webview.
 
+You could also send the photo to an AI api, store it in a database or cloud storage, send it to Roboflow, or do other processing.
+
 ### Install MentraOS on your phone
 
 MentraOS install links: [mentra.glass/install](https://mentra.glass/install)
