@@ -36,59 +36,104 @@ class ExampleMentraOSApp extends AppServer {
       apiKey: MENTRAOS_API_KEY,
       port: PORT,
     });
-
-    this.setupEJS();
     this.setupWebviewRoutes();
   }
 
+
   /**
-   * Configure EJS for manual template rendering
+   * Handle new session creation and button press events
    */
-  private setupEJS(): void {
-    // EJS will be used manually to avoid module resolution issues
-    // No Express view engine configuration needed
+  protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
+    // this gets called whenever a user launches the app
+    this.logger.info(`Session started for user ${userId}`);
+
+    // set the initial state of the user
+    this.isStreamingPhotos.set(userId, false);
+    this.nextPhotoTime.set(userId, Date.now());
+
+    // this gets called whenever a user presses a button
+    session.events.onButtonPress(async (button) => {
+      this.logger.info(`Button pressed: ${button.buttonId}, type: ${button.pressType}`);
+
+      if (button.pressType === 'long') {
+        // the user held the button, so we toggle the streaming mode
+        this.isStreamingPhotos.set(userId, !this.isStreamingPhotos.get(userId));
+        this.logger.info(`Streaming photos for user ${userId} is now ${this.isStreamingPhotos.get(userId)}`);
+        return;
+      } else {
+        // the user pressed the button, so we take a single photo
+        try {
+          // first, get the photo
+          const photoRequest = session.camera.requestPhoto();
+          // if there was an error, log it
+          photoRequest.catch((error) => this.logger.error(`Error taking photo: ${error}`));
+          // if there was no error, cache the photo for display
+          photoRequest.then((photo) => {
+            this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
+            this.cachePhoto(photo, userId);
+          });
+        } catch (error) {
+          this.logger.error(`Error taking photo: ${error}`);
+        }
+      }
+    });
+
+    // every 2 seconds, check if we are in streaming mode and if we are ready to take another photo
+    setInterval(async () => {
+      if (this.isStreamingPhotos.get(userId) && Date.now() > (this.nextPhotoTime.get(userId) ?? 0)) {
+        try {
+          // set the next photos for 30 seconds from now, as a fallback if this fails
+          this.nextPhotoTime.set(userId, Date.now() + 30000);
+
+          // actually take the photo
+          const photo = await session.camera.requestPhoto();
+
+          // set the next photo time to now, since we are ready to take another photo
+          this.nextPhotoTime.set(userId, Date.now());
+
+          // cache the photo for display
+          this.cachePhoto(photo, userId);
+        } catch (error) {
+          this.logger.error(`Error auto-taking photo: ${error}`);
+        }
+      }
+    }, 2000);
   }
+
+  protected async onStop(sessionId: string, userId: string, reason: string): Promise<void> {
+    // clean up the user's state
+    this.isStreamingPhotos.set(userId, false);
+    this.nextPhotoTime.delete(userId);
+    this.logger.info(`Session stopped for user ${userId}, reason: ${reason}`);
+  }
+
+  /**
+   * Cache a photo for display
+   */
+  private async cachePhoto(photo: PhotoData, userId: string) {
+    // create a new stored photo object which includes the photo data and the user id
+    const cachedPhoto: StoredPhoto = {
+      requestId: photo.requestId,
+      buffer: photo.buffer,
+      timestamp: photo.timestamp,
+      userId: userId,
+      mimeType: photo.mimeType,
+      filename: photo.filename,
+      size: photo.size
+    };
+    // cache the photo for display
+    this.photos.set(userId, cachedPhoto);
+    // update the latest photo timestamp
+    this.latestPhotoTimestamp.set(userId, cachedPhoto.timestamp.getTime());
+    this.logger.info(`Photo cached for user ${userId}, timestamp: ${cachedPhoto.timestamp}`);
+  }
+
 
   /**
  * Set up webview routes for photo display functionality
  */
   private setupWebviewRoutes(): void {
     const app = this.getExpressApp();
-
-    // Main webview route - displays the photo viewer interface
-    app.get('/webview', async (req: any, res: any) => {
-      const userId = (req as AuthenticatedRequest).authUserId;
-
-      if (!userId) {
-        res.status(401).send(`
-          <html>
-            <head><title>Photo Viewer - Not Authenticated</title></head>
-            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-              <h1>Please open this page from the MentraOS app</h1>
-            </body>
-          </html>
-        `);
-        return;
-      }
-
-      try {
-        // Manually render the EJS template to avoid module resolution issues
-        const templatePath = path.join(process.cwd(), 'views', 'photo-viewer.ejs');
-        const html = await ejs.renderFile(templatePath, {});
-        res.send(html);
-      } catch (error) {
-        this.logger.error(`Error rendering EJS template: ${error}`);
-        res.status(500).send(`
-          <html>
-            <head><title>Photo Viewer - Error</title></head>
-            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-              <h1>Error loading photo viewer</h1>
-              <p>Please try refreshing the page</p>
-            </body>
-          </html>
-        `);
-      }
-    });
 
     // API endpoint to get the latest photo for the authenticated user
     app.get('/api/latest-photo', (req: any, res: any) => {
@@ -134,72 +179,27 @@ class ExampleMentraOSApp extends AppServer {
       });
       res.send(photo.buffer);
     });
-  }
 
+    // Main webview route - displays the photo viewer interface
+    app.get('/webview', async (req: any, res: any) => {
+      const userId = (req as AuthenticatedRequest).authUserId;
 
-
-  /**
-   * Handle new session creation and button press events
-   */
-  protected async onSession(session: AppSession, sessionId: string, userId: string): Promise<void> {
-    this.logger.info(`Session started for user ${userId}`);
-    this.isStreamingPhotos.set(userId, false);
-    this.nextPhotoTime.set(userId, Date.now());
-
-    session.events.onButtonPress(async (button) => {
-      this.logger.info(`Button pressed: ${button.buttonId}, type: ${button.pressType}`);
-
-      if (button.pressType === 'long') {
-        this.isStreamingPhotos.set(userId, !this.isStreamingPhotos.get(userId));
-        this.logger.info(`Streaming photos for user ${userId} is now ${this.isStreamingPhotos.get(userId)}`);
+      if (!userId) {
+        res.status(401).send(`
+          <html>
+            <head><title>Photo Viewer - Not Authenticated</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+              <h1>Please open this page from the MentraOS app</h1>
+            </body>
+          </html>
+        `);
         return;
-      } else {
-        try {
-        const photoRequest = session.camera.requestPhoto();
-        photoRequest.catch((error) => this.logger.error(`Error taking photo: ${error}`));
-        photoRequest.then((photo) => {
-            this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
-            this.cachePhoto(photo, userId);
-          });
-        } catch (error) {
-          this.logger.error(`Error taking photo: ${error}`);
-        }
       }
+
+      const templatePath = path.join(process.cwd(), 'views', 'photo-viewer.ejs');
+      const html = await ejs.renderFile(templatePath, {});
+      res.send(html);
     });
-
-    setInterval(async () => {
-      if (this.isStreamingPhotos.get(userId) && Date.now() > (this.nextPhotoTime.get(userId) ?? 0)) {
-        try {
-          this.nextPhotoTime.set(userId, Date.now() + 30000);
-          const photo = await session.camera.requestPhoto();
-          this.nextPhotoTime.set(userId, Date.now()-1);
-          this.cachePhoto(photo, userId);
-        } catch (error) {
-          this.logger.error(`Error auto-taking photo: ${error}`);
-        }
-      }
-    }, 2000);
-  }
-
-  protected async onStop(sessionId: string, userId: string, reason: string): Promise<void> {
-    this.isStreamingPhotos.set(userId, false);
-    this.nextPhotoTime.delete(userId);
-    this.logger.info(`Session stopped for user ${userId}, reason: ${reason}`);
-  }
-
-  private async cachePhoto(photo: PhotoData, userId: string) {
-    const cachedPhoto: StoredPhoto = {
-      requestId: photo.requestId,
-      buffer: photo.buffer,
-      timestamp: photo.timestamp,
-      userId: userId,
-      mimeType: photo.mimeType,
-      filename: photo.filename,
-      size: photo.size
-    };
-    this.photos.set(userId, cachedPhoto);
-    this.latestPhotoTimestamp.set(userId, cachedPhoto.timestamp.getTime());
-    this.logger.info(`Photo cached for user ${userId}, timestamp: ${cachedPhoto.timestamp}`);
   }
 }
 

@@ -1,4 +1,6 @@
-# MentraOS-Cloud-Example-App
+# MentraOS-Camera-Example-App
+
+This is a simple example app which demonstrates how to use the MentraOS Camera API to take photos and display them in a webview.
 
 ### Install MentraOS on your phone
 
@@ -30,13 +32,9 @@ MentraOS install links: [mentra.glass/install](https://mentra.glass/install)
 
 1. [Install bun](https://bun.sh/docs/installation)
 
-2. Create a new repo from this template using the `Use this template` dropdown in the upper right or the following command: `gh repo create --template Mentra-Community/MentraOS-Cloud-Example-App`
+2. Clone this repo locally: `git clone https://github.com/Mentra-Community/MentraOS-Camera-Example-App`
 
-    ![Create repo from template](https://github.com/user-attachments/assets/c10e14e8-2dc5-4dfa-adac-dd334c1b73a5)
-
-3. Clone your new repo locally: `git clone <your-repo-url>`
-
-4. cd into your repo, then type `bun install`
+3. cd into your repo, then type `bun install`
 
 5. Set up your environment variables:
    * Create a `.env` file in the root directory by copying the example: `cp .env.example .env`
@@ -57,8 +55,4 @@ MentraOS install links: [mentra.glass/install](https://mentra.glass/install)
 
 ### Next Steps
 
-Check out the full documentation at [docs.mentra.glass](https://docs.mentra.glass/core-concepts)
-
-#### Subscribing to events
-
-You can listen for transcriptions, translations, and other events within the onSession function.
+Check out the full documentation at [docs.mentra.glass](https://docs.mentra.glass/camera)
