@@ -1,4 +1,4 @@
-# MentraOS-Cloud-Example-App
+# MentraOS-Camera-Example-App
 
 ### Install MentraOS on your phone
 
