@@ -61,6 +61,7 @@ class ExampleMentraOSApp extends AppServer {
         this.logger.info(`Streaming photos for user ${userId} is now ${this.isStreamingPhotos.get(userId)}`);
         return;
       } else {
+        session.layouts.showTextWall("Button pressed, about to take photo", {durationMs: 4000});
         // the user pressed the button, so we take a single photo
         try {
           // first, get the photo
