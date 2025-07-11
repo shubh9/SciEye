@@ -65,14 +65,10 @@ class ExampleMentraOSApp extends AppServer {
         // the user pressed the button, so we take a single photo
         try {
           // first, get the photo
-          const photoRequest = session.camera.requestPhoto();
+          const photo = await session.camera.requestPhoto();
           // if there was an error, log it
-          photoRequest.catch((error) => this.logger.error(`Error taking photo: ${error}`));
-          // if there was no error, cache the photo for display
-          photoRequest.then((photo) => {
-            this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
-            this.cachePhoto(photo, userId);
-          });
+          this.logger.info(`Photo taken for user ${userId}, timestamp: ${photo.timestamp}`);
+          this.cachePhoto(photo, userId);
         } catch (error) {
           this.logger.error(`Error taking photo: ${error}`);
         }
