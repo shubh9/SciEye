@@ -1,4 +1,4 @@
-# MentraOS-Camera-Example-App
+# SciEye
 
 This is a simple example app which demonstrates how to use the MentraOS Camera API to take photos and display them in a webview.
 
